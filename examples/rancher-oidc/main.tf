@@ -28,47 +28,47 @@ provider "asgardeo" {
 # The output client_id + client_secret are fed into Rancher's
 # "Generic OIDC" authentication provider settings.
 # ──────────────────────────────────────────────────────────────────────────────
-resource "asgardeo_application" "rancher" {
-  name        = var.app_name
-  description = "Rancher Manager SSO via Asgardeo. Managed by Terraform."
-  access_url  = "${var.rancher_url}/dashboard"
+# resource "asgardeo_application" "rancher" {
+#   name        = var.app_name
+#   description = "Rancher Manager SSO via Asgardeo. Managed by Terraform."
+#   access_url  = "${var.rancher_url}/dashboard"
 
-  oidc {
-    # Rancher requires authorization_code; refresh_token recommended for session keep-alive.
-    grant_types = ["authorization_code", "refresh_token"]
+#   oidc {
+#     # Rancher requires authorization_code; refresh_token recommended for session keep-alive.
+#     grant_types = ["authorization_code", "refresh_token"]
 
-    # Rancher's OIDC callback URL (configured in Rancher UI → Authentication → OIDC).
-    callback_urls = ["${var.rancher_url}/verify-auth"]
+#     # Rancher's OIDC callback URL (configured in Rancher UI → Authentication → OIDC).
+#     callback_urls = ["${var.rancher_url}/verify-auth"]
 
-    # Allow requests from the Rancher origin (needed for token refresh XHR calls).
-    allowed_origins = [var.rancher_url]
+#     # Allow requests from the Rancher origin (needed for token refresh XHR calls).
+#     allowed_origins = [var.rancher_url]
 
-    # Where Asgardeo redirects after a logout is triggered from Rancher.
-    logout_redirect_urls = ["${var.rancher_url}/dashboard/auth/logout"]
+#     # Where Asgardeo redirects after a logout is triggered from Rancher.
+#     logout_redirect_urls = ["${var.rancher_url}/dashboard/auth/logout"]
 
-    # Rancher supports PKCE — enable for better security.
-    pkce {
-      mandatory                         = true
-      support_plain_transform_algorithm = false
-    }
+#     # Rancher supports PKCE — enable for better security.
+#     pkce {
+#       mandatory                         = true
+#       support_plain_transform_algorithm = false
+#     }
 
-    access_token {
-      type                             = "JWT"
-      user_access_token_expiry_seconds = 3600
-    }
+#     access_token {
+#       type                             = "JWT"
+#       user_access_token_expiry_seconds = 3600
+#     }
 
-    refresh_token {
-      expiry_seconds      = 86400
-      renew_refresh_token = true
-    }
-  }
+#     refresh_token {
+#       expiry_seconds      = 86400
+#       renew_refresh_token = true
+#     }
+#   }
 
-  advanced {
-    # Skip consent screens for a seamless SSO experience in Rancher.
-    skip_login_consent  = var.skip_consent
-    skip_logout_consent = var.skip_consent
-  }
-}
+#   advanced {
+#     # Skip consent screens for a seamless SSO experience in Rancher.
+#     skip_login_consent  = var.skip_consent
+#     skip_logout_consent = var.skip_consent
+#   }
+# }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # (Optional) Configure Rancher's Generic OIDC provider using the outputs above.

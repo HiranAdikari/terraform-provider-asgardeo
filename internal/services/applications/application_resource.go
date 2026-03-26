@@ -95,6 +95,12 @@ func (r *ApplicationResource) Create(ctx context.Context, req resource.CreateReq
 		createReq.AdvancedConfigurations = &adv
 	}
 
+	// Attach claim configuration if specified.
+	if len(plan.ClaimConfiguration) > 0 {
+		cc := buildClaimConfig(plan.ClaimConfiguration[0])
+		createReq.ClaimConfiguration = &cc
+	}
+
 	tflog.Debug(ctx, "Creating Asgardeo application", map[string]any{"name": plan.Name.ValueString()})
 
 	app, err := r.client.CreateApplication(ctx, createReq)
@@ -184,6 +190,11 @@ func (r *ApplicationResource) Update(ctx context.Context, req resource.UpdateReq
 		patchReq.AdvancedConfigurations = &adv
 	}
 
+	if len(plan.ClaimConfiguration) > 0 {
+		cc := buildClaimConfig(plan.ClaimConfiguration[0])
+		patchReq.ClaimConfiguration = &cc
+	}
+
 	if err := r.client.PatchApplication(ctx, id, patchReq); err != nil {
 		resp.Diagnostics.AddError("Error updating application", err.Error())
 		return
@@ -193,6 +204,8 @@ func (r *ApplicationResource) Update(ctx context.Context, req resource.UpdateReq
 	var oidcCfg *asgardeo.OIDCConfiguration
 	if len(plan.OIDC) > 0 {
 		cfg := buildOIDCConfig(plan.OIDC[0])
+		// Asgardeo requires the existing client_id in the PUT body for validation.
+		cfg.ClientID = state.ClientID.ValueString()
 		updated, err := r.client.PutOIDCConfig(ctx, id, cfg)
 		if err != nil {
 			resp.Diagnostics.AddError("Error updating OIDC config", err.Error())
@@ -252,17 +265,27 @@ func (r *ApplicationResource) ImportState(ctx context.Context, req resource.Impo
 
 // applicationModel is the Terraform state model for asgardeo_application.
 type applicationModel struct {
-	ID                 types.String    `tfsdk:"id"`
-	ClientID           types.String    `tfsdk:"client_id"`
-	ClientSecret       types.String    `tfsdk:"client_secret"`
-	Name               types.String    `tfsdk:"name"`
-	Description        types.String    `tfsdk:"description"`
-	AccessURL          types.String    `tfsdk:"access_url"`
-	LogoutReturnURL    types.String    `tfsdk:"logout_return_url"`
-	ApplicationEnabled types.Bool      `tfsdk:"application_enabled"`
-	OIDC               []oidcModel     `tfsdk:"oidc"`
-	SAML               []samlModel     `tfsdk:"saml"`
-	Advanced           []advancedModel `tfsdk:"advanced"`
+	ID                 types.String             `tfsdk:"id"`
+	ClientID           types.String             `tfsdk:"client_id"`
+	ClientSecret       types.String             `tfsdk:"client_secret"`
+	Name               types.String             `tfsdk:"name"`
+	Description        types.String             `tfsdk:"description"`
+	AccessURL          types.String             `tfsdk:"access_url"`
+	LogoutReturnURL    types.String             `tfsdk:"logout_return_url"`
+	ApplicationEnabled types.Bool               `tfsdk:"application_enabled"`
+	OIDC               []oidcModel              `tfsdk:"oidc"`
+	SAML               []samlModel              `tfsdk:"saml"`
+	ClaimConfiguration []claimConfigurationModel `tfsdk:"claim_configuration"`
+	Advanced           []advancedModel          `tfsdk:"advanced"`
+}
+
+type claimConfigurationModel struct {
+	RequestedClaims []requestedClaimModel `tfsdk:"requested_claims"`
+}
+
+type requestedClaimModel struct {
+	URI       types.String `tfsdk:"uri"`
+	Mandatory types.Bool   `tfsdk:"mandatory"`
 }
 
 type oidcModel struct {
@@ -385,6 +408,17 @@ func buildSAMLConfig(m samlModel) asgardeo.SAMLConfiguration {
 	return asgardeo.SAMLConfiguration{ManualConfiguration: manual}
 }
 
+func buildClaimConfig(m claimConfigurationModel) asgardeo.ClaimConfiguration {
+	cfg := asgardeo.ClaimConfiguration{Dialect: "LOCAL"}
+	for _, rc := range m.RequestedClaims {
+		cfg.RequestedClaims = append(cfg.RequestedClaims, asgardeo.RequestedClaim{
+			Claim:     asgardeo.ClaimRef{URI: rc.URI.ValueString()},
+			Mandatory: rc.Mandatory.ValueBool(),
+		})
+	}
+	return cfg
+}
+
 func buildAdvancedConfig(m advancedModel) asgardeo.AdvancedConfigurations {
 	return asgardeo.AdvancedConfigurations{
 		SkipLoginConsent:       m.SkipLoginConsent.ValueBool(),
@@ -476,6 +510,22 @@ func flattenApplication(
 		m.OIDC = []oidcModel{om}
 	} else {
 		m.OIDC = []oidcModel{}
+	}
+
+	// Flatten claim configuration.
+	if app.ClaimConfiguration != nil && len(app.ClaimConfiguration.RequestedClaims) > 0 {
+		cm := claimConfigurationModel{}
+		for _, rc := range app.ClaimConfiguration.RequestedClaims {
+			cm.RequestedClaims = append(cm.RequestedClaims, requestedClaimModel{
+				URI:       types.StringValue(rc.Claim.URI),
+				Mandatory: types.BoolValue(rc.Mandatory),
+			})
+		}
+		m.ClaimConfiguration = []claimConfigurationModel{cm}
+	} else if len(prior.ClaimConfiguration) > 0 {
+		m.ClaimConfiguration = prior.ClaimConfiguration
+	} else {
+		m.ClaimConfiguration = []claimConfigurationModel{}
 	}
 
 	// Flatten SAML config.

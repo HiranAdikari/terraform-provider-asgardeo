@@ -47,7 +47,7 @@ signs:
       - "${artifact}"
 
 release:
-  draft: true
+  draft: false
 
 changelog:
   sort: asc

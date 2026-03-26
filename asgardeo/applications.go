@@ -171,12 +171,17 @@ func (c *Client) PutOIDCConfig(ctx context.Context, appID string, cfg OIDCConfig
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
 		return nil, parseAPIError(resp)
 	}
 
+	// Asgardeo sometimes returns 200 with an empty body after a successful PUT.
+	// Fall back to a GET in that case so callers always receive the current config.
 	var result OIDCConfiguration
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if err == io.EOF {
+			return c.GetOIDCConfig(ctx, appID)
+		}
 		return nil, fmt.Errorf("decode OIDC config response: %w", err)
 	}
 	return &result, nil

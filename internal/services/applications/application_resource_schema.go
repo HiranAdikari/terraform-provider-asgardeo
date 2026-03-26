@@ -253,6 +253,40 @@ func applicationResourceSchema() schema.Schema {
 				},
 			},
 
+			// ── Claim Configuration ───────────────────────────────────────────
+			"claim_configuration": schema.ListNestedBlock{
+				MarkdownDescription: "Controls which user attributes (claims) are included in tokens issued to this application. " +
+					"Use this to ensure claims like `email` or `username` are returned in the OIDC token so that " +
+					"Rancher (and other relying parties) can display readable usernames.",
+				Validators: []validator.List{listvalidator.SizeAtMost(1)},
+				NestedObject: schema.NestedBlockObject{
+					Blocks: map[string]schema.Block{
+						"requested_claims": schema.ListNestedBlock{
+							MarkdownDescription: "List of local claims to include in the token. " +
+								"Common Asgardeo claim URIs:\n\n" +
+								"- `http://wso2.org/claims/emailaddress` — email address\n" +
+								"- `http://wso2.org/claims/username` — username\n" +
+								"- `http://wso2.org/claims/givenname` — first name\n" +
+								"- `http://wso2.org/claims/lastname` — last name",
+							NestedObject: schema.NestedBlockObject{
+								Attributes: map[string]schema.Attribute{
+									"uri": schema.StringAttribute{
+										MarkdownDescription: "Local claim URI, e.g. `http://wso2.org/claims/emailaddress`.",
+										Required:            true,
+									},
+									"mandatory": schema.BoolAttribute{
+										MarkdownDescription: "Require the claim to be present. Defaults to `false`.",
+										Optional:            true,
+										Computed:            true,
+										Default:             booldefault.StaticBool(false),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+
 			// ── Advanced ──────────────────────────────────────────────────────
 			"advanced": schema.ListNestedBlock{
 				MarkdownDescription: "Advanced application configuration.",

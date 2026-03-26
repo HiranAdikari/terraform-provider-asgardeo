@@ -15,6 +15,7 @@ type ApplicationCreateRequest struct {
 	ApplicationEnabled          bool                         `json:"applicationEnabled,omitempty"`
 	InboundProtocolConfiguration *InboundProtocolConfiguration `json:"inboundProtocolConfiguration,omitempty"`
 	AdvancedConfigurations      *AdvancedConfigurations      `json:"advancedConfigurations,omitempty"`
+	ClaimConfiguration          *ClaimConfiguration          `json:"claimConfiguration,omitempty"`
 }
 
 // ApplicationPatchRequest is sent to PATCH /applications/{id}.
@@ -26,6 +27,7 @@ type ApplicationPatchRequest struct {
 	LogoutReturnURL        string                  `json:"logoutReturnUrl,omitempty"`
 	ApplicationEnabled     *bool                   `json:"applicationEnabled,omitempty"`
 	AdvancedConfigurations *AdvancedConfigurations `json:"advancedConfigurations,omitempty"`
+	ClaimConfiguration     *ClaimConfiguration     `json:"claimConfiguration,omitempty"`
 }
 
 // ApplicationResponse is returned by GET /applications/{id}.
@@ -39,6 +41,7 @@ type ApplicationResponse struct {
 	ApplicationEnabled     bool                    `json:"applicationEnabled"`
 	IsManagementApp        bool                    `json:"isManagementApp"`
 	AdvancedConfigurations *AdvancedConfigurations `json:"advancedConfigurations"`
+	ClaimConfiguration     *ClaimConfiguration     `json:"claimConfiguration"`
 	// InboundProtocols contains lightweight references; full config is fetched separately.
 	InboundProtocols []InboundProtocolRef `json:"inboundProtocols"`
 }
@@ -169,6 +172,25 @@ type SAMLSLOProfile struct {
 type SAMLResponseSigning struct {
 	Enabled          bool   `json:"enabled"`
 	SigningAlgorithm string `json:"signingAlgorithm,omitempty"`
+}
+
+// ─── Claim Configuration ──────────────────────────────────────────────────────
+
+// ClaimConfiguration controls which user attributes are included in tokens issued to the application.
+type ClaimConfiguration struct {
+	Dialect         string           `json:"dialect,omitempty"`
+	RequestedClaims []RequestedClaim `json:"requestedClaims,omitempty"`
+}
+
+// RequestedClaim represents a single claim requested from the identity provider.
+type RequestedClaim struct {
+	Claim     ClaimRef `json:"claim"`
+	Mandatory bool     `json:"mandatory"`
+}
+
+// ClaimRef references a local claim by its URI.
+type ClaimRef struct {
+	URI string `json:"uri"`
 }
 
 // ─── Advanced Configuration ───────────────────────────────────────────────────
