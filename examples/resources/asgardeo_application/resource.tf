@@ -5,8 +5,8 @@ resource "asgardeo_application" "example" {
   access_url  = "https://app.example.com/login"
 
   oidc {
-    grant_types    = ["authorization_code", "refresh_token"]
-    callback_urls  = ["https://app.example.com/callback"]
+    grant_types     = ["authorization_code", "refresh_token"]
+    callback_urls   = ["https://app.example.com/callback"]
     allowed_origins = ["https://app.example.com"]
 
     pkce {
@@ -14,8 +14,20 @@ resource "asgardeo_application" "example" {
     }
   }
 
+  claim_configuration {
+    requested_claims {
+      uri       = "http://wso2.org/claims/emailaddress"
+      mandatory = true
+    }
+    requested_claims {
+      uri       = "http://wso2.org/claims/username"
+      mandatory = true
+    }
+  }
+
   advanced {
-    skip_login_consent = true
+    skip_login_consent            = true
+    return_authenticated_idp_list = true
   }
 }
 

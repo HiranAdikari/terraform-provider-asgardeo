@@ -12,13 +12,17 @@ Manages an application in Asgardeo. Supports **OIDC**, **OAuth2**, and **SAML** 
 After creation, the provider exposes the server-generated `client_id` and `client_secret` as
 computed attributes — these are the credentials your service uses to authenticate with Asgardeo.
 
-## Example Usage
-
 ### OIDC Web Application
 
 {{ tffile "examples/resources/asgardeo_application/resource.tf" }}
 
+### SAML 2.0 Application
+
+{{ tffile "examples/resources/asgardeo_application/saml_application.tf" }}
+
 ### Rancher Manager OIDC
+
+This example shows how to configure Asgardeo as an OIDC provider for Rancher, ensuring required claims like `email` are returned.
 
 {{ tffile "examples/rancher-oidc/main.tf" }}
 
