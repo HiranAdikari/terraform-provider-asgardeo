@@ -55,12 +55,25 @@ func NewClient(orgName, clientID, clientSecret string) *Client {
 // doRequest executes an authenticated HTTP request against the Asgardeo API.
 // path must begin with "/" and is relative to the base URL.
 func (c *Client) doRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	return c.do(ctx, method, c.baseURL+path, body)
+}
+
+// doOrgRequest executes an authenticated HTTP request against the
+// organization-scoped path (/o/api/server/v1/...). This path gates a few
+// endpoints (notably OIDC clientSecret retrieval) behind the
+// "internal_org_application_mgt_client_secret_*" scopes — see fetchToken.
+func (c *Client) doOrgRequest(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
+	orgBase := strings.Replace(c.baseURL, "/api/server/v1", "/o/api/server/v1", 1)
+	return c.do(ctx, method, orgBase+path, body)
+}
+
+// do is the shared HTTP request helper used by doRequest and doOrgRequest.
+func (c *Client) do(ctx context.Context, method, reqURL string, body io.Reader) (*http.Response, error) {
 	token, err := c.getToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("obtain access token: %w", err)
 	}
 
-	reqURL := c.baseURL + path
 	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("build request %s %s: %w", method, reqURL, err)
@@ -86,12 +99,23 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 
 // fetchToken calls the Asgardeo token endpoint using the client_credentials grant.
 // Caller must hold c.mu.
+//
+// internal_org_application_mgt_client_secret_view is required so GET on
+// /o/api/server/v1/applications/{id}/inbound-protocols/oidc returns the
+// generated clientSecret in its response body. Without that scope, the
+// endpoint omits the secret and the resource's client_secret attribute
+// ends up unknown after apply (Terraform error: "Provider returned invalid
+// result object after apply"). The corresponding API authorization must
+// be granted to the M2M application in the Asgardeo Console:
+//   Resource: Application Management API
+//   Scope:    "View application client secret"
 func (c *Client) fetchToken(ctx context.Context) (string, error) {
 	scopes := []string{
 		"internal_application_mgt_create",
 		"internal_application_mgt_view",
 		"internal_application_mgt_update",
 		"internal_application_mgt_delete",
+		"internal_org_application_mgt_client_secret_view",
 	}
 
 	form := url.Values{}

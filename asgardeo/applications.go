@@ -135,9 +135,16 @@ func (c *Client) GetApplicationByName(ctx context.Context, name string) (*Applic
 
 // GetOIDCConfig retrieves the OIDC inbound protocol configuration.
 // Returns nil, nil when no OIDC config exists (404).
+//
+// The organization-scoped path (/o/api/server/v1/...) is used because the
+// tenant-scoped path (/api/server/v1/...) does not return the generated
+// clientSecret in its response body — Asgardeo gates secret retrieval
+// behind the "View application client secret" authorization, which is only
+// honored on the /o/ path. Without this we cannot populate the resource's
+// client_secret Computed attribute and Terraform errors at apply time.
 func (c *Client) GetOIDCConfig(ctx context.Context, appID string) (*OIDCConfiguration, error) {
 	path := fmt.Sprintf("/applications/%s/inbound-protocols/oidc", appID)
-	resp, err := c.doRequest(ctx, http.MethodGet, path, nil)
+	resp, err := c.doOrgRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
