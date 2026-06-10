@@ -107,8 +107,9 @@ func (c *Client) getToken(ctx context.Context) (string, error) {
 // ends up unknown after apply (Terraform error: "Provider returned invalid
 // result object after apply"). The corresponding API authorization must
 // be granted to the M2M application in the Asgardeo Console:
-//   Resource: Application Management API
-//   Scope:    "View application client secret"
+//
+//	Resource: Application Management API
+//	Scope:    "View application client secret"
 func (c *Client) fetchToken(ctx context.Context) (string, error) {
 	scopes := []string{
 		"internal_application_mgt_create",
@@ -116,6 +117,10 @@ func (c *Client) fetchToken(ctx context.Context) (string, error) {
 		"internal_application_mgt_update",
 		"internal_application_mgt_delete",
 		"internal_org_application_mgt_client_secret_view",
+		// internal_api_resource_view lets the authorized-api resource resolve an
+		// API-resource identifier (e.g. "/scim2/Users") to its UUID via
+		// GET /api-resources before authorizing it on an application.
+		"internal_api_resource_view",
 	}
 
 	form := url.Values{}

@@ -5,8 +5,10 @@ resource "asgardeo_application" "saml_app" {
   access_url  = "https://app.example.com/saml/login"
 
   saml {
-    issuer                         = "my-saml-issuer"
-    assertion_consumer_urls        = ["https://app.example.com/saml/acs"]
-    default_assertion_consumer_url = "https://app.example.com/saml/acs"
+    manual_configuration {
+      issuer                         = "my-saml-issuer"
+      assertion_consumer_urls        = ["https://app.example.com/saml/acs"]
+      default_assertion_consumer_url = "https://app.example.com/saml/acs"
+    }
   }
 }

@@ -53,6 +53,18 @@ func applicationResourceSchema() schema.Schema {
 				Computed:            true,
 				Default:             stringdefault.StaticString(""),
 			},
+			"template_id": schema.StringAttribute{
+				MarkdownDescription: "Asgardeo application template to seed defaults from. " +
+					"Common values: `single-page-application`, `m2m-application`, " +
+					"`web-app-template`, `mobile-application`, `custom-application`. " +
+					"Required for SPA-style apps — Asgardeo's API rejects (HTTP 500 " +
+					"`APP-65006`) public-client + PKCE-mandatory configs without it. " +
+					"When omitted Asgardeo applies its default (Standard-Based Web App). " +
+					"Templates are create-time-only — changing this value forces resource " +
+					"replacement.",
+				Optional:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplaceIfConfigured()},
+			},
 			"access_url": schema.StringAttribute{
 				MarkdownDescription: "URL users land on when they launch this application from the My Account portal.",
 				Optional:            true,
