@@ -3,6 +3,7 @@ package applications
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -70,6 +71,7 @@ func (r *ApplicationResource) Create(ctx context.Context, req resource.CreateReq
 		AccessURL:          plan.AccessURL.ValueString(),
 		LogoutReturnURL:    plan.LogoutReturnURL.ValueString(),
 		ApplicationEnabled: plan.ApplicationEnabled.ValueBool(),
+		TemplateID:         plan.TemplateID.ValueString(),
 	}
 
 	// Attach OIDC protocol config if specified.
@@ -265,18 +267,19 @@ func (r *ApplicationResource) ImportState(ctx context.Context, req resource.Impo
 
 // applicationModel is the Terraform state model for asgardeo_application.
 type applicationModel struct {
-	ID                 types.String             `tfsdk:"id"`
-	ClientID           types.String             `tfsdk:"client_id"`
-	ClientSecret       types.String             `tfsdk:"client_secret"`
-	Name               types.String             `tfsdk:"name"`
-	Description        types.String             `tfsdk:"description"`
-	AccessURL          types.String             `tfsdk:"access_url"`
-	LogoutReturnURL    types.String             `tfsdk:"logout_return_url"`
-	ApplicationEnabled types.Bool               `tfsdk:"application_enabled"`
-	OIDC               []oidcModel              `tfsdk:"oidc"`
-	SAML               []samlModel              `tfsdk:"saml"`
+	ID                 types.String              `tfsdk:"id"`
+	ClientID           types.String              `tfsdk:"client_id"`
+	ClientSecret       types.String              `tfsdk:"client_secret"`
+	Name               types.String              `tfsdk:"name"`
+	Description        types.String              `tfsdk:"description"`
+	AccessURL          types.String              `tfsdk:"access_url"`
+	LogoutReturnURL    types.String              `tfsdk:"logout_return_url"`
+	ApplicationEnabled types.Bool                `tfsdk:"application_enabled"`
+	TemplateID         types.String              `tfsdk:"template_id"`
+	OIDC               []oidcModel               `tfsdk:"oidc"`
+	SAML               []samlModel               `tfsdk:"saml"`
 	ClaimConfiguration []claimConfigurationModel `tfsdk:"claim_configuration"`
-	Advanced           []advancedModel          `tfsdk:"advanced"`
+	Advanced           []advancedModel           `tfsdk:"advanced"`
 }
 
 type claimConfigurationModel struct {
@@ -289,29 +292,29 @@ type requestedClaimModel struct {
 }
 
 type oidcModel struct {
-	GrantTypes         []types.String     `tfsdk:"grant_types"`
-	CallbackURLs       []types.String     `tfsdk:"callback_urls"`
-	AllowedOrigins     []types.String     `tfsdk:"allowed_origins"`
-	LogoutRedirectURLs []types.String     `tfsdk:"logout_redirect_urls"`
-	PublicClient       types.Bool         `tfsdk:"public_client"`
-	PKCE               []pkceModel        `tfsdk:"pkce"`
-	AccessToken        []accessTokenModel `tfsdk:"access_token"`
+	GrantTypes         []types.String      `tfsdk:"grant_types"`
+	CallbackURLs       []types.String      `tfsdk:"callback_urls"`
+	AllowedOrigins     []types.String      `tfsdk:"allowed_origins"`
+	LogoutRedirectURLs []types.String      `tfsdk:"logout_redirect_urls"`
+	PublicClient       types.Bool          `tfsdk:"public_client"`
+	PKCE               []pkceModel         `tfsdk:"pkce"`
+	AccessToken        []accessTokenModel  `tfsdk:"access_token"`
 	RefreshToken       []refreshTokenModel `tfsdk:"refresh_token"`
 }
 
 type pkceModel struct {
-	Mandatory                     types.Bool `tfsdk:"mandatory"`
+	Mandatory                      types.Bool `tfsdk:"mandatory"`
 	SupportPlainTransformAlgorithm types.Bool `tfsdk:"support_plain_transform_algorithm"`
 }
 
 type accessTokenModel struct {
-	Type                              types.String `tfsdk:"type"`
-	UserAccessTokenExpirySeconds      types.Int64  `tfsdk:"user_access_token_expiry_seconds"`
-	ApplicationAccessTokenExpirySeconds types.Int64 `tfsdk:"application_access_token_expiry_seconds"`
+	Type                                types.String `tfsdk:"type"`
+	UserAccessTokenExpirySeconds        types.Int64  `tfsdk:"user_access_token_expiry_seconds"`
+	ApplicationAccessTokenExpirySeconds types.Int64  `tfsdk:"application_access_token_expiry_seconds"`
 }
 
 type refreshTokenModel struct {
-	ExpirySeconds    types.Int64 `tfsdk:"expiry_seconds"`
+	ExpirySeconds     types.Int64 `tfsdk:"expiry_seconds"`
 	RenewRefreshToken types.Bool  `tfsdk:"renew_refresh_token"`
 }
 
@@ -320,23 +323,94 @@ type samlModel struct {
 }
 
 type samlManualModel struct {
-	Issuer                    types.String    `tfsdk:"issuer"`
-	AssertionConsumerURLs     []types.String  `tfsdk:"assertion_consumer_urls"`
-	DefaultAssertionConsumerURL types.String  `tfsdk:"default_assertion_consumer_url"`
-	SingleLogout              []samlSLOModel  `tfsdk:"single_logout"`
+	Issuer                      types.String   `tfsdk:"issuer"`
+	AssertionConsumerURLs       []types.String `tfsdk:"assertion_consumer_urls"`
+	DefaultAssertionConsumerURL types.String   `tfsdk:"default_assertion_consumer_url"`
+	SingleLogout                []samlSLOModel `tfsdk:"single_logout"`
 }
 
 type samlSLOModel struct {
-	Enabled            types.Bool   `tfsdk:"enabled"`
-	LogoutRequestURL   types.String `tfsdk:"logout_request_url"`
-	LogoutResponseURL  types.String `tfsdk:"logout_response_url"`
+	Enabled           types.Bool   `tfsdk:"enabled"`
+	LogoutRequestURL  types.String `tfsdk:"logout_request_url"`
+	LogoutResponseURL types.String `tfsdk:"logout_response_url"`
 }
 
 type advancedModel struct {
-	SkipLoginConsent      types.Bool `tfsdk:"skip_login_consent"`
-	SkipLogoutConsent     types.Bool `tfsdk:"skip_logout_consent"`
-	Saas                  types.Bool `tfsdk:"saas"`
+	SkipLoginConsent       types.Bool `tfsdk:"skip_login_consent"`
+	SkipLogoutConsent      types.Bool `tfsdk:"skip_logout_consent"`
+	Saas                   types.Bool `tfsdk:"saas"`
 	DiscoverableByEndUsers types.Bool `tfsdk:"discoverable_by_end_users"`
+}
+
+// ─── Callback URL encoding ───────────────────────────────────────────────────
+//
+// Asgardeo only accepts a single string in the OIDC `callbackURLs` array. To
+// register multiple redirect URIs the API requires a regex alternation packed
+// into one element: `regexp=(url1|url2|...)`. We hide that quirk from the
+// schema so consumers keep using a natural list.
+
+const callbackRegexpPrefix = "regexp=("
+const callbackRegexpSuffix = ")"
+
+// encodeCallbackURLs turns a list of URLs into the wire format Asgardeo
+// expects. Two or more entries are joined into a regex alternation; a single
+// entry is sent as-is.
+func encodeCallbackURLs(urls []string) []string {
+	switch len(urls) {
+	case 0:
+		return nil
+	case 1:
+		return []string{urls[0]}
+	default:
+		return []string{callbackRegexpPrefix + strings.Join(urls, "|") + callbackRegexpSuffix}
+	}
+}
+
+// decodeCallbackURLs reverses encodeCallbackURLs. If the API returned a single
+// regex-packed string, split it back into the original URLs.
+func decodeCallbackURLs(urls []string) []string {
+	if len(urls) != 1 {
+		return urls
+	}
+	s := urls[0]
+	if strings.HasPrefix(s, callbackRegexpPrefix) && strings.HasSuffix(s, callbackRegexpSuffix) {
+		inner := strings.TrimSuffix(strings.TrimPrefix(s, callbackRegexpPrefix), callbackRegexpSuffix)
+		return strings.Split(inner, "|")
+	}
+	return urls
+}
+
+// stringValues unwraps a slice of types.String into plain strings.
+func stringValues(in []types.String) []string {
+	out := make([]string, 0, len(in))
+	for _, v := range in {
+		out = append(out, v.ValueString())
+	}
+	return out
+}
+
+// preserveOrder returns `current` reordered to match the order of `desired`
+// when the two contain the same set of values. If the sets differ the API is
+// authoritative and `current` is returned unchanged. This avoids spurious
+// "inconsistent result after apply" errors when Asgardeo returns a list in a
+// different order than the user wrote.
+func preserveOrder(desired, current []string) []string {
+	if len(desired) != len(current) {
+		return current
+	}
+	have := make(map[string]int, len(current))
+	for _, v := range current {
+		have[v]++
+	}
+	for _, v := range desired {
+		if have[v] == 0 {
+			return current
+		}
+		have[v]--
+	}
+	out := make([]string, len(desired))
+	copy(out, desired)
+	return out
 }
 
 // ─── Builders (model → API struct) ───────────────────────────────────────────
@@ -349,17 +423,24 @@ func buildOIDCConfig(m oidcModel) asgardeo.OIDCConfiguration {
 	for _, g := range m.GrantTypes {
 		cfg.GrantTypes = append(cfg.GrantTypes, g.ValueString())
 	}
+	urls := make([]string, 0, len(m.CallbackURLs))
 	for _, u := range m.CallbackURLs {
-		cfg.CallbackURLs = append(cfg.CallbackURLs, u.ValueString())
+		urls = append(urls, u.ValueString())
 	}
+	cfg.CallbackURLs = encodeCallbackURLs(urls)
 	for _, o := range m.AllowedOrigins {
 		cfg.AllowedOrigins = append(cfg.AllowedOrigins, o.ValueString())
 	}
-	// Map logout_redirect_urls to the front-channel logout URL.
-	// Asgardeo stores only one front-channel logout URL; we use the first entry.
+	// Asgardeo's `logout.frontChannelLogoutUrl` is a single string field but
+	// also accepts the same `regexp=(url1|url2|...)` alternation as
+	// `callbackURLs`, so we use the helper to support multiple logout URLs.
 	if len(m.LogoutRedirectURLs) > 0 {
+		logoutURLs := make([]string, 0, len(m.LogoutRedirectURLs))
+		for _, u := range m.LogoutRedirectURLs {
+			logoutURLs = append(logoutURLs, u.ValueString())
+		}
 		cfg.Logout = &asgardeo.OIDCLogoutConfig{
-			FrontChannelLogoutURL: m.LogoutRedirectURLs[0].ValueString(),
+			FrontChannelLogoutURL: encodeCallbackURLs(logoutURLs)[0],
 		}
 	}
 
@@ -371,8 +452,8 @@ func buildOIDCConfig(m oidcModel) asgardeo.OIDCConfiguration {
 	}
 	if len(m.AccessToken) > 0 {
 		cfg.AccessToken = &asgardeo.AccessTokenConfig{
-			Type:                              m.AccessToken[0].Type.ValueString(),
-			UserAccessTokenExpiryInSeconds:    m.AccessToken[0].UserAccessTokenExpirySeconds.ValueInt64(),
+			Type:                                  m.AccessToken[0].Type.ValueString(),
+			UserAccessTokenExpiryInSeconds:        m.AccessToken[0].UserAccessTokenExpirySeconds.ValueInt64(),
 			ApplicationAccessTokenExpiryInSeconds: m.AccessToken[0].ApplicationAccessTokenExpirySeconds.ValueInt64(),
 		}
 	}
@@ -391,7 +472,7 @@ func buildSAMLConfig(m samlModel) asgardeo.SAMLConfiguration {
 	}
 	mc := m.ManualConfiguration[0]
 	manual := &asgardeo.SAMLManualConfiguration{
-		Issuer:                    mc.Issuer.ValueString(),
+		Issuer:                      mc.Issuer.ValueString(),
 		DefaultAssertionConsumerURL: mc.DefaultAssertionConsumerURL.ValueString(),
 	}
 	for _, u := range mc.AssertionConsumerURLs {
@@ -448,17 +529,27 @@ func flattenApplication(
 		ApplicationEnabled: types.BoolValue(app.ApplicationEnabled),
 		ClientID:           prior.ClientID,
 		ClientSecret:       prior.ClientSecret,
+		// Asgardeo's GET /applications/{id} does not return templateId, so
+		// preserve the plan/state value through reads. RequiresReplace on the
+		// schema means changing it forces a recreate (templates are seed-only).
+		TemplateID: prior.TemplateID,
 	}
 
-	// Flatten advanced config.
+	// Asgardeo always returns advancedConfigurations populated with defaults,
+	// so only surface the block when the user actually configured one or when
+	// any field has a non-zero value. Otherwise an empty `advanced {}` block
+	// would appear in state that the user never wrote.
 	if app.AdvancedConfigurations != nil {
 		adv := app.AdvancedConfigurations
-		m.Advanced = []advancedModel{{
-			SkipLoginConsent:       types.BoolValue(adv.SkipLoginConsent),
-			SkipLogoutConsent:      types.BoolValue(adv.SkipLogoutConsent),
-			Saas:                   types.BoolValue(adv.Saas),
-			DiscoverableByEndUsers: types.BoolValue(adv.DiscoverableByEndUsers),
-		}}
+		anySet := adv.SkipLoginConsent || adv.SkipLogoutConsent || adv.Saas || adv.DiscoverableByEndUsers
+		if anySet || len(prior.Advanced) > 0 {
+			m.Advanced = []advancedModel{{
+				SkipLoginConsent:       types.BoolValue(adv.SkipLoginConsent),
+				SkipLogoutConsent:      types.BoolValue(adv.SkipLogoutConsent),
+				Saas:                   types.BoolValue(adv.Saas),
+				DiscoverableByEndUsers: types.BoolValue(adv.DiscoverableByEndUsers),
+			}}
+		}
 	} else if len(prior.Advanced) > 0 {
 		m.Advanced = prior.Advanced
 	}
@@ -479,25 +570,43 @@ func flattenApplication(
 		for _, g := range oidcCfg.GrantTypes {
 			om.GrantTypes = append(om.GrantTypes, types.StringValue(g))
 		}
-		for _, u := range oidcCfg.CallbackURLs {
+		var priorOIDC *oidcModel
+		if len(prior.OIDC) > 0 {
+			priorOIDC = &prior.OIDC[0]
+		}
+		decoded := decodeCallbackURLs(oidcCfg.CallbackURLs)
+		if priorOIDC != nil {
+			decoded = preserveOrder(stringValues(priorOIDC.CallbackURLs), decoded)
+		}
+		for _, u := range decoded {
 			om.CallbackURLs = append(om.CallbackURLs, types.StringValue(u))
 		}
-		for _, o := range oidcCfg.AllowedOrigins {
+		origins := append([]string(nil), oidcCfg.AllowedOrigins...)
+		if priorOIDC != nil {
+			origins = preserveOrder(stringValues(priorOIDC.AllowedOrigins), origins)
+		}
+		for _, o := range origins {
 			om.AllowedOrigins = append(om.AllowedOrigins, types.StringValue(o))
 		}
 		if oidcCfg.Logout != nil && oidcCfg.Logout.FrontChannelLogoutURL != "" {
-			om.LogoutRedirectURLs = []types.String{types.StringValue(oidcCfg.Logout.FrontChannelLogoutURL)}
+			logoutURLs := decodeCallbackURLs([]string{oidcCfg.Logout.FrontChannelLogoutURL})
+			if priorOIDC != nil {
+				logoutURLs = preserveOrder(stringValues(priorOIDC.LogoutRedirectURLs), logoutURLs)
+			}
+			for _, u := range logoutURLs {
+				om.LogoutRedirectURLs = append(om.LogoutRedirectURLs, types.StringValue(u))
+			}
 		}
 		if oidcCfg.PKCE != nil {
 			om.PKCE = []pkceModel{{
-				Mandatory:                     types.BoolValue(oidcCfg.PKCE.Mandatory),
+				Mandatory:                      types.BoolValue(oidcCfg.PKCE.Mandatory),
 				SupportPlainTransformAlgorithm: types.BoolValue(oidcCfg.PKCE.SupportPlainTransformAlgorithm),
 			}}
 		}
 		if oidcCfg.AccessToken != nil {
 			om.AccessToken = []accessTokenModel{{
-				Type:                              types.StringValue(oidcCfg.AccessToken.Type),
-				UserAccessTokenExpirySeconds:      types.Int64Value(oidcCfg.AccessToken.UserAccessTokenExpiryInSeconds),
+				Type:                                types.StringValue(oidcCfg.AccessToken.Type),
+				UserAccessTokenExpirySeconds:        types.Int64Value(oidcCfg.AccessToken.UserAccessTokenExpiryInSeconds),
 				ApplicationAccessTokenExpirySeconds: types.Int64Value(oidcCfg.AccessToken.ApplicationAccessTokenExpiryInSeconds),
 			}}
 		}
@@ -532,7 +641,7 @@ func flattenApplication(
 	if samlCfg != nil && samlCfg.ManualConfiguration != nil {
 		mc := samlCfg.ManualConfiguration
 		mm := samlManualModel{
-			Issuer:                    types.StringValue(mc.Issuer),
+			Issuer:                      types.StringValue(mc.Issuer),
 			DefaultAssertionConsumerURL: types.StringValue(mc.DefaultAssertionConsumerURL),
 		}
 		for _, u := range mc.AssertionConsumerURLs {

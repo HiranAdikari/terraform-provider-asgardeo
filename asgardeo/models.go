@@ -6,16 +6,17 @@ package asgardeo
 
 // ApplicationCreateRequest is sent to POST /applications.
 type ApplicationCreateRequest struct {
-	Name                        string                       `json:"name"`
-	Description                 string                       `json:"description,omitempty"`
-	ImageURL                    string                       `json:"imageUrl,omitempty"`
-	AccessURL                   string                       `json:"accessUrl,omitempty"`
-	LogoutReturnURL             string                       `json:"logoutReturnUrl,omitempty"`
-	IsManagementApp             bool                         `json:"isManagementApp,omitempty"`
-	ApplicationEnabled          bool                         `json:"applicationEnabled,omitempty"`
+	Name                         string                        `json:"name"`
+	Description                  string                        `json:"description,omitempty"`
+	ImageURL                     string                        `json:"imageUrl,omitempty"`
+	AccessURL                    string                        `json:"accessUrl,omitempty"`
+	LogoutReturnURL              string                        `json:"logoutReturnUrl,omitempty"`
+	IsManagementApp              bool                          `json:"isManagementApp,omitempty"`
+	ApplicationEnabled           bool                          `json:"applicationEnabled,omitempty"`
+	TemplateID                   string                        `json:"templateId,omitempty"`
 	InboundProtocolConfiguration *InboundProtocolConfiguration `json:"inboundProtocolConfiguration,omitempty"`
-	AdvancedConfigurations      *AdvancedConfigurations      `json:"advancedConfigurations,omitempty"`
-	ClaimConfiguration          *ClaimConfiguration          `json:"claimConfiguration,omitempty"`
+	AdvancedConfigurations       *AdvancedConfigurations       `json:"advancedConfigurations,omitempty"`
+	ClaimConfiguration           *ClaimConfiguration           `json:"claimConfiguration,omitempty"`
 }
 
 // ApplicationPatchRequest is sent to PATCH /applications/{id}.
@@ -48,8 +49,8 @@ type ApplicationResponse struct {
 
 // InboundProtocolRef is the lightweight reference returned inside ApplicationResponse.
 type InboundProtocolRef struct {
-	Type      string `json:"type"`
-	SelfLink  string `json:"self"`
+	Type     string `json:"type"`
+	SelfLink string `json:"self"`
 }
 
 // ApplicationListResponse is returned by GET /applications.
@@ -78,17 +79,17 @@ type OIDCConfiguration struct {
 	State        string `json:"state,omitempty"`
 
 	// Writable fields.
-	GrantTypes                       []string         `json:"grantTypes"`
-	CallbackURLs                     []string         `json:"callbackURLs,omitempty"`
-	AllowedOrigins                   []string         `json:"allowedOrigins,omitempty"`
-	PublicClient                     bool             `json:"publicClient,omitempty"`
-	PKCE                             *PKCEConfig      `json:"pkce,omitempty"`
-	AccessToken                      *AccessTokenConfig `json:"accessToken,omitempty"`
-	RefreshToken                     *RefreshTokenConfig `json:"refreshToken,omitempty"`
-	IDToken                          *IDTokenConfig   `json:"idToken,omitempty"`
-	Logout                           *OIDCLogoutConfig `json:"logout,omitempty"`
-	ValidateRequestObjectSignature   bool             `json:"validateRequestObjectSignature,omitempty"`
-	IsFAPIApplication                bool             `json:"isFAPIApplication,omitempty"`
+	GrantTypes                     []string            `json:"grantTypes"`
+	CallbackURLs                   []string            `json:"callbackURLs,omitempty"`
+	AllowedOrigins                 []string            `json:"allowedOrigins,omitempty"`
+	PublicClient                   bool                `json:"publicClient,omitempty"`
+	PKCE                           *PKCEConfig         `json:"pkce,omitempty"`
+	AccessToken                    *AccessTokenConfig  `json:"accessToken,omitempty"`
+	RefreshToken                   *RefreshTokenConfig `json:"refreshToken,omitempty"`
+	IDToken                        *IDTokenConfig      `json:"idToken,omitempty"`
+	Logout                         *OIDCLogoutConfig   `json:"logout,omitempty"`
+	ValidateRequestObjectSignature bool                `json:"validateRequestObjectSignature,omitempty"`
+	IsFAPIApplication              bool                `json:"isFAPIApplication,omitempty"`
 }
 
 // PKCEConfig controls PKCE settings.
@@ -99,12 +100,12 @@ type PKCEConfig struct {
 
 // AccessTokenConfig controls access token behaviour.
 type AccessTokenConfig struct {
-	Type                              string `json:"type,omitempty"`
-	UserAccessTokenExpiryInSeconds    int64  `json:"userAccessTokenExpiryInSeconds,omitempty"`
-	ApplicationAccessTokenExpiryInSeconds int64 `json:"applicationAccessTokenExpiryInSeconds,omitempty"`
-	BindingType                       string `json:"bindingType,omitempty"`
-	RevokeTokensWhenIDPSessionTerminated bool `json:"revokeTokensWhenIDPSessionTerminated,omitempty"`
-	ValidateTokenBinding              bool   `json:"validateTokenBinding,omitempty"`
+	Type                                  string `json:"type,omitempty"`
+	UserAccessTokenExpiryInSeconds        int64  `json:"userAccessTokenExpiryInSeconds,omitempty"`
+	ApplicationAccessTokenExpiryInSeconds int64  `json:"applicationAccessTokenExpiryInSeconds,omitempty"`
+	BindingType                           string `json:"bindingType,omitempty"`
+	RevokeTokensWhenIDPSessionTerminated  bool   `json:"revokeTokensWhenIDPSessionTerminated,omitempty"`
+	ValidateTokenBinding                  bool   `json:"validateTokenBinding,omitempty"`
 }
 
 // RefreshTokenConfig controls refresh token behaviour.
@@ -116,9 +117,9 @@ type RefreshTokenConfig struct {
 
 // IDTokenConfig controls ID token behaviour.
 type IDTokenConfig struct {
-	ExpiryInSeconds        int64    `json:"expiryInSeconds,omitempty"`
-	Audience               []string `json:"audience,omitempty"`
-	IDTokenSignedResponseAlg string `json:"idTokenSignedResponseAlg,omitempty"`
+	ExpiryInSeconds          int64    `json:"expiryInSeconds,omitempty"`
+	Audience                 []string `json:"audience,omitempty"`
+	IDTokenSignedResponseAlg string   `json:"idTokenSignedResponseAlg,omitempty"`
 }
 
 // OIDCLogoutConfig holds front-channel and back-channel logout URLs.
@@ -131,41 +132,41 @@ type OIDCLogoutConfig struct {
 
 // SAMLConfiguration wraps the three mutually exclusive SAML config modes.
 type SAMLConfiguration struct {
-	MetadataFile        string                    `json:"metadataFile,omitempty"`
-	MetadataURL         string                    `json:"metadataURL,omitempty"`
-	ManualConfiguration *SAMLManualConfiguration  `json:"manualConfiguration,omitempty"`
+	MetadataFile        string                   `json:"metadataFile,omitempty"`
+	MetadataURL         string                   `json:"metadataURL,omitempty"`
+	ManualConfiguration *SAMLManualConfiguration `json:"manualConfiguration,omitempty"`
 }
 
 // SAMLManualConfiguration is used when SAML metadata is supplied manually.
 type SAMLManualConfiguration struct {
-	Issuer                    string              `json:"issuer"`
-	AssertionConsumerURLs     []string            `json:"assertionConsumerUrls"`
-	DefaultAssertionConsumerURL string            `json:"defaultAssertionConsumerUrl,omitempty"`
-	SingleSignOnProfile       *SAMLSSOProfile     `json:"singleSignOnProfile,omitempty"`
-	SingleLogoutProfile       *SAMLSLOProfile     `json:"singleLogoutProfile,omitempty"`
-	ResponseSigning           *SAMLResponseSigning `json:"responseSigning,omitempty"`
+	Issuer                      string               `json:"issuer"`
+	AssertionConsumerURLs       []string             `json:"assertionConsumerUrls"`
+	DefaultAssertionConsumerURL string               `json:"defaultAssertionConsumerUrl,omitempty"`
+	SingleSignOnProfile         *SAMLSSOProfile      `json:"singleSignOnProfile,omitempty"`
+	SingleLogoutProfile         *SAMLSLOProfile      `json:"singleLogoutProfile,omitempty"`
+	ResponseSigning             *SAMLResponseSigning `json:"responseSigning,omitempty"`
 }
 
 // SAMLSSOProfile controls SSO bindings and assertion settings.
 type SAMLSSOProfile struct {
-	Bindings                                     []string         `json:"bindings,omitempty"`
-	EnableSignatureValidationForArtifactBinding  bool             `json:"enableSignatureValidationForArtifactBinding,omitempty"`
-	EnableIdpInitiatedSingleSignOn               bool             `json:"enableIdpInitiatedSingleSignOn,omitempty"`
-	Assertion                                    *SAMLAssertion   `json:"assertion,omitempty"`
+	Bindings                                    []string       `json:"bindings,omitempty"`
+	EnableSignatureValidationForArtifactBinding bool           `json:"enableSignatureValidationForArtifactBinding,omitempty"`
+	EnableIdpInitiatedSingleSignOn              bool           `json:"enableIdpInitiatedSingleSignOn,omitempty"`
+	Assertion                                   *SAMLAssertion `json:"assertion,omitempty"`
 }
 
 // SAMLAssertion controls assertion-level settings.
 type SAMLAssertion struct {
-	NameIDFormat     string `json:"nameIdFormat,omitempty"`
-	DigestAlgorithm  string `json:"digestAlgorithm,omitempty"`
+	NameIDFormat    string `json:"nameIdFormat,omitempty"`
+	DigestAlgorithm string `json:"digestAlgorithm,omitempty"`
 }
 
 // SAMLSLOProfile controls single logout settings.
 type SAMLSLOProfile struct {
-	Enabled              bool   `json:"enabled"`
-	LogoutRequestURL     string `json:"logoutRequestUrl,omitempty"`
-	LogoutResponseURL    string `json:"logoutResponseUrl,omitempty"`
-	LogoutMethod         string `json:"logoutMethod,omitempty"`
+	Enabled           bool   `json:"enabled"`
+	LogoutRequestURL  string `json:"logoutRequestUrl,omitempty"`
+	LogoutResponseURL string `json:"logoutResponseUrl,omitempty"`
+	LogoutMethod      string `json:"logoutMethod,omitempty"`
 }
 
 // SAMLResponseSigning controls signing of SAML responses.
@@ -197,12 +198,12 @@ type ClaimRef struct {
 
 // AdvancedConfigurations holds advanced application settings.
 type AdvancedConfigurations struct {
-	Saas                        bool `json:"saas,omitempty"`
-	DiscoverableByEndUsers      bool `json:"discoverableByEndUsers,omitempty"`
-	SkipLoginConsent            bool `json:"skipLoginConsent,omitempty"`
-	SkipLogoutConsent           bool `json:"skipLogoutConsent,omitempty"`
-	ReturnAuthenticatedIdpList  bool `json:"returnAuthenticatedIdpList,omitempty"`
-	EnableAuthorization         bool `json:"enableAuthorization,omitempty"`
+	Saas                         bool `json:"saas,omitempty"`
+	DiscoverableByEndUsers       bool `json:"discoverableByEndUsers,omitempty"`
+	SkipLoginConsent             bool `json:"skipLoginConsent,omitempty"`
+	SkipLogoutConsent            bool `json:"skipLogoutConsent,omitempty"`
+	ReturnAuthenticatedIdpList   bool `json:"returnAuthenticatedIdpList,omitempty"`
+	EnableAuthorization          bool `json:"enableAuthorization,omitempty"`
 	EnableAPIBasedAuthentication bool `json:"enableAPIBasedAuthentication,omitempty"`
 }
 
