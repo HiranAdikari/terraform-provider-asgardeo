@@ -56,14 +56,14 @@ func (d *ApplicationDataSource) Configure(_ context.Context, req datasource.Conf
 
 // applicationDataSourceModel is the state model for the data source.
 type applicationDataSourceModel struct {
-	ID                    types.String   `tfsdk:"id"`
-	Name                  types.String   `tfsdk:"name"`
-	Description           types.String   `tfsdk:"description"`
-	AccessURL             types.String   `tfsdk:"access_url"`
-	LogoutReturnURL       types.String   `tfsdk:"logout_return_url"`
-	ApplicationEnabled    types.Bool     `tfsdk:"application_enabled"`
-	ClientID              types.String   `tfsdk:"client_id"`
-	InboundProtocolTypes  []types.String `tfsdk:"inbound_protocol_types"`
+	ID                   types.String   `tfsdk:"id"`
+	Name                 types.String   `tfsdk:"name"`
+	Description          types.String   `tfsdk:"description"`
+	AccessURL            types.String   `tfsdk:"access_url"`
+	LogoutReturnURL      types.String   `tfsdk:"logout_return_url"`
+	ApplicationEnabled   types.Bool     `tfsdk:"application_enabled"`
+	ClientID             types.String   `tfsdk:"client_id"`
+	InboundProtocolTypes []types.String `tfsdk:"inbound_protocol_types"`
 }
 
 func (d *ApplicationDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
