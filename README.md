@@ -143,6 +143,7 @@ output "rancher_oidc_client_secret" {
    - `internal_application_mgt_view`
    - `internal_application_mgt_update`
    - `internal_application_mgt_delete`
+   - `internal_api_resource_view` (required by `asgardeo_application_authorized_api` to resolve an API-resource identifier to its UUID)
 3. Copy the **Client ID** and **Client Secret**.
 
 Supply credentials via provider arguments or environment variables:
