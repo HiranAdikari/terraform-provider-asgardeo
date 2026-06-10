@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
@@ -76,7 +77,7 @@ func (r *ApplicationResource) Create(ctx context.Context, req resource.CreateReq
 
 	// Attach OIDC protocol config if specified.
 	if len(plan.OIDC) > 0 {
-		oidcCfg := buildOIDCConfig(plan.OIDC[0])
+		oidcCfg := buildOIDCConfig(ctx, plan.OIDC[0])
 		createReq.InboundProtocolConfiguration = &asgardeo.InboundProtocolConfiguration{
 			OIDC: &oidcCfg,
 		}
@@ -121,7 +122,7 @@ func (r *ApplicationResource) Create(ctx context.Context, req resource.CreateReq
 		}
 	}
 
-	state := flattenApplication(app, oidcCfg, nil, plan)
+	state := flattenApplication(ctx, app, oidcCfg, nil, plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -162,7 +163,7 @@ func (r *ApplicationResource) Read(ctx context.Context, req resource.ReadRequest
 		}
 	}
 
-	newState := flattenApplication(app, oidcCfg, samlCfg, state)
+	newState := flattenApplication(ctx, app, oidcCfg, samlCfg, state)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
@@ -205,7 +206,7 @@ func (r *ApplicationResource) Update(ctx context.Context, req resource.UpdateReq
 	// Update OIDC protocol config.
 	var oidcCfg *asgardeo.OIDCConfiguration
 	if len(plan.OIDC) > 0 {
-		cfg := buildOIDCConfig(plan.OIDC[0])
+		cfg := buildOIDCConfig(ctx, plan.OIDC[0])
 		// Asgardeo requires the existing client_id in the PUT body for validation.
 		cfg.ClientID = state.ClientID.ValueString()
 		updated, err := r.client.PutOIDCConfig(ctx, id, cfg)
@@ -222,7 +223,7 @@ func (r *ApplicationResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	newState := flattenApplication(app, oidcCfg, nil, plan)
+	newState := flattenApplication(ctx, app, oidcCfg, nil, plan)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &newState)...)
 }
 
@@ -259,7 +260,7 @@ func (r *ApplicationResource) ImportState(ctx context.Context, req resource.Impo
 	oidcCfg, _ := r.client.GetOIDCConfig(ctx, app.ID)
 	samlCfg, _ := r.client.GetSAMLConfig(ctx, app.ID)
 
-	state := flattenApplication(app, oidcCfg, samlCfg, applicationModel{})
+	state := flattenApplication(ctx, app, oidcCfg, samlCfg, applicationModel{})
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -292,10 +293,15 @@ type requestedClaimModel struct {
 }
 
 type oidcModel struct {
+	// grant_types is Required-only in the schema, so it can never be unknown at
+	// plan time — a plain slice is safe. callback_urls, allowed_origins and
+	// logout_redirect_urls are Optional+Computed, so an omitted value is UNKNOWN
+	// at plan time and the framework cannot decode unknown into a Go slice; they
+	// must be types.List. See the M2M (client_credentials, no callbacks) repro.
 	GrantTypes         []types.String      `tfsdk:"grant_types"`
-	CallbackURLs       []types.String      `tfsdk:"callback_urls"`
-	AllowedOrigins     []types.String      `tfsdk:"allowed_origins"`
-	LogoutRedirectURLs []types.String      `tfsdk:"logout_redirect_urls"`
+	CallbackURLs       types.List          `tfsdk:"callback_urls"`
+	AllowedOrigins     types.List          `tfsdk:"allowed_origins"`
+	LogoutRedirectURLs types.List          `tfsdk:"logout_redirect_urls"`
 	PublicClient       types.Bool          `tfsdk:"public_client"`
 	PKCE               []pkceModel         `tfsdk:"pkce"`
 	AccessToken        []accessTokenModel  `tfsdk:"access_token"`
@@ -380,13 +386,30 @@ func decodeCallbackURLs(urls []string) []string {
 	return urls
 }
 
-// stringValues unwraps a slice of types.String into plain strings.
-func stringValues(in []types.String) []string {
-	out := make([]string, 0, len(in))
-	for _, v := range in {
-		out = append(out, v.ValueString())
+// listToStrings unwraps a types.List of strings into a plain []string. A null
+// or unknown list yields nil — callers must treat that as "no value set" rather
+// than an empty list. This is the read counterpart to stringListValue and is
+// what lets Optional+Computed list attributes survive the unknown-at-plan-time
+// case without a decode panic.
+func listToStrings(ctx context.Context, l types.List) []string {
+	if l.IsNull() || l.IsUnknown() {
+		return nil
 	}
+	out := make([]string, 0, len(l.Elements()))
+	// Errors here are impossible for a List(StringType); ignore the diagnostics.
+	_ = l.ElementsAs(ctx, &out, false)
 	return out
+}
+
+// stringListValue builds a types.List of strings from a plain []string. An empty
+// or nil slice yields a non-null, non-unknown empty list so that Computed list
+// attributes always settle to a concrete value in state.
+func stringListValue(urls []string) types.List {
+	elems := make([]attr.Value, 0, len(urls))
+	for _, u := range urls {
+		elems = append(elems, types.StringValue(u))
+	}
+	return types.ListValueMust(types.StringType, elems)
 }
 
 // preserveOrder returns `current` reordered to match the order of `desired`
@@ -415,7 +438,7 @@ func preserveOrder(desired, current []string) []string {
 
 // ─── Builders (model → API struct) ───────────────────────────────────────────
 
-func buildOIDCConfig(m oidcModel) asgardeo.OIDCConfiguration {
+func buildOIDCConfig(ctx context.Context, m oidcModel) asgardeo.OIDCConfiguration {
 	cfg := asgardeo.OIDCConfiguration{
 		PublicClient: m.PublicClient.ValueBool(),
 	}
@@ -423,22 +446,12 @@ func buildOIDCConfig(m oidcModel) asgardeo.OIDCConfiguration {
 	for _, g := range m.GrantTypes {
 		cfg.GrantTypes = append(cfg.GrantTypes, g.ValueString())
 	}
-	urls := make([]string, 0, len(m.CallbackURLs))
-	for _, u := range m.CallbackURLs {
-		urls = append(urls, u.ValueString())
-	}
-	cfg.CallbackURLs = encodeCallbackURLs(urls)
-	for _, o := range m.AllowedOrigins {
-		cfg.AllowedOrigins = append(cfg.AllowedOrigins, o.ValueString())
-	}
+	cfg.CallbackURLs = encodeCallbackURLs(listToStrings(ctx, m.CallbackURLs))
+	cfg.AllowedOrigins = append(cfg.AllowedOrigins, listToStrings(ctx, m.AllowedOrigins)...)
 	// Asgardeo's `logout.frontChannelLogoutUrl` is a single string field but
 	// also accepts the same `regexp=(url1|url2|...)` alternation as
 	// `callbackURLs`, so we use the helper to support multiple logout URLs.
-	if len(m.LogoutRedirectURLs) > 0 {
-		logoutURLs := make([]string, 0, len(m.LogoutRedirectURLs))
-		for _, u := range m.LogoutRedirectURLs {
-			logoutURLs = append(logoutURLs, u.ValueString())
-		}
+	if logoutURLs := listToStrings(ctx, m.LogoutRedirectURLs); len(logoutURLs) > 0 {
 		cfg.Logout = &asgardeo.OIDCLogoutConfig{
 			FrontChannelLogoutURL: encodeCallbackURLs(logoutURLs)[0],
 		}
@@ -515,6 +528,7 @@ func buildAdvancedConfig(m advancedModel) asgardeo.AdvancedConfigurations {
 // The prior state/plan is passed so that blocks absent from the API response
 // can be preserved as empty slices (Terraform requires consistent types).
 func flattenApplication(
+	ctx context.Context,
 	app *asgardeo.ApplicationResponse,
 	oidcCfg *asgardeo.OIDCConfiguration,
 	samlCfg *asgardeo.SAMLConfiguration,
@@ -576,27 +590,24 @@ func flattenApplication(
 		}
 		decoded := decodeCallbackURLs(oidcCfg.CallbackURLs)
 		if priorOIDC != nil {
-			decoded = preserveOrder(stringValues(priorOIDC.CallbackURLs), decoded)
+			decoded = preserveOrder(listToStrings(ctx, priorOIDC.CallbackURLs), decoded)
 		}
-		for _, u := range decoded {
-			om.CallbackURLs = append(om.CallbackURLs, types.StringValue(u))
-		}
+		om.CallbackURLs = stringListValue(decoded)
+
 		origins := append([]string(nil), oidcCfg.AllowedOrigins...)
 		if priorOIDC != nil {
-			origins = preserveOrder(stringValues(priorOIDC.AllowedOrigins), origins)
+			origins = preserveOrder(listToStrings(ctx, priorOIDC.AllowedOrigins), origins)
 		}
-		for _, o := range origins {
-			om.AllowedOrigins = append(om.AllowedOrigins, types.StringValue(o))
-		}
+		om.AllowedOrigins = stringListValue(origins)
+
+		var logoutURLs []string
 		if oidcCfg.Logout != nil && oidcCfg.Logout.FrontChannelLogoutURL != "" {
-			logoutURLs := decodeCallbackURLs([]string{oidcCfg.Logout.FrontChannelLogoutURL})
+			logoutURLs = decodeCallbackURLs([]string{oidcCfg.Logout.FrontChannelLogoutURL})
 			if priorOIDC != nil {
-				logoutURLs = preserveOrder(stringValues(priorOIDC.LogoutRedirectURLs), logoutURLs)
-			}
-			for _, u := range logoutURLs {
-				om.LogoutRedirectURLs = append(om.LogoutRedirectURLs, types.StringValue(u))
+				logoutURLs = preserveOrder(listToStrings(ctx, priorOIDC.LogoutRedirectURLs), logoutURLs)
 			}
 		}
+		om.LogoutRedirectURLs = stringListValue(logoutURLs)
 		if oidcCfg.PKCE != nil {
 			om.PKCE = []pkceModel{{
 				Mandatory:                      types.BoolValue(oidcCfg.PKCE.Mandatory),
