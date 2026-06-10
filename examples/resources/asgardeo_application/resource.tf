@@ -4,6 +4,10 @@ resource "asgardeo_application" "example" {
   description = "Example OIDC web application"
   access_url  = "https://app.example.com/login"
 
+  # Seed defaults from a built-in Asgardeo template. Optional; changing it
+  # forces the application to be recreated.
+  template_id = "single-page-application"
+
   oidc {
     grant_types     = ["authorization_code", "refresh_token"]
     callback_urls   = ["https://app.example.com/callback"]
@@ -26,8 +30,7 @@ resource "asgardeo_application" "example" {
   }
 
   advanced {
-    skip_login_consent            = true
-    return_authenticated_idp_list = true
+    skip_login_consent = true
   }
 }
 

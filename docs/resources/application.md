@@ -21,6 +21,10 @@ resource "asgardeo_application" "example" {
   description = "Example OIDC web application"
   access_url  = "https://app.example.com/login"
 
+  # Seed defaults from a built-in Asgardeo template. Optional; changing it
+  # forces the application to be recreated.
+  template_id = "single-page-application"
+
   oidc {
     grant_types     = ["authorization_code", "refresh_token"]
     callback_urls   = ["https://app.example.com/callback"]
@@ -43,8 +47,7 @@ resource "asgardeo_application" "example" {
   }
 
   advanced {
-    skip_login_consent            = true
-    return_authenticated_idp_list = true
+    skip_login_consent = true
   }
 }
 
@@ -68,9 +71,11 @@ resource "asgardeo_application" "saml_app" {
   access_url  = "https://app.example.com/saml/login"
 
   saml {
-    issuer                         = "my-saml-issuer"
-    assertion_consumer_urls        = ["https://app.example.com/saml/acs"]
-    default_assertion_consumer_url = "https://app.example.com/saml/acs"
+    manual_configuration {
+      issuer                         = "my-saml-issuer"
+      assertion_consumer_urls        = ["https://app.example.com/saml/acs"]
+      default_assertion_consumer_url = "https://app.example.com/saml/acs"
+    }
   }
 }
 ```
@@ -95,9 +100,9 @@ terraform {
 }
 
 provider "asgardeo" {
-  org_name      = "hiranadikari" #var.asgardeo_org_name
-  client_id     = "yAuf8LpcVZfLdOMiXlGodIFIeEwa" #var.asgardeo_client_id
-  client_secret = "cV4p5rfkutLmshdubVHJEh5Zce593tVRQUc4k_tvXqQa" #var.asgardeo_client_secret
+  org_name      = var.asgardeo_org_name
+  client_id     = var.asgardeo_client_id
+  client_secret = var.asgardeo_client_secret
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -204,6 +209,7 @@ terraform import asgardeo_application.example <application-id>
 - `logout_return_url` (String) URL users are redirected to after a global logout.
 - `oidc` (Block List) OIDC / OAuth2 inbound protocol configuration. Specify exactly one of `oidc` or `saml`. (see [below for nested schema](#nestedblock--oidc))
 - `saml` (Block List) SAML 2.0 inbound protocol configuration. Specify exactly one of `oidc` or `saml`. (see [below for nested schema](#nestedblock--saml))
+- `template_id` (String) Asgardeo application template to seed defaults from. Common values: `single-page-application`, `m2m-application`, `web-app-template`, `mobile-application`, `custom-application`. Required for SPA-style apps — Asgardeo's API rejects (HTTP 500 `APP-65006`) public-client + PKCE-mandatory configs without it. When omitted Asgardeo applies its default (Standard-Based Web App). Templates are create-time-only — changing this value forces resource replacement.
 
 ### Read-Only
 

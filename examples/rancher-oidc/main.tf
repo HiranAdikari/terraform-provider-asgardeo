@@ -13,9 +13,9 @@ terraform {
 }
 
 provider "asgardeo" {
-  org_name      = "hiranadikari"                                 #var.asgardeo_org_name
-  client_id     = "yAuf8LpcVZfLdOMiXlGodIFIeEwa"                 #var.asgardeo_client_id
-  client_secret = "cV4p5rfkutLmshdubVHJEh5Zce593tVRQUc4k_tvXqQa" #var.asgardeo_client_secret
+  org_name      = var.asgardeo_org_name
+  client_id     = var.asgardeo_client_id
+  client_secret = var.asgardeo_client_secret
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
