@@ -116,6 +116,10 @@ func (c *Client) fetchToken(ctx context.Context) (string, error) {
 		"internal_application_mgt_update",
 		"internal_application_mgt_delete",
 		"internal_org_application_mgt_client_secret_view",
+		// internal_api_resource_view lets the authorized-api resource resolve an
+		// API-resource identifier (e.g. "/scim2/Users") to its UUID via
+		// GET /api-resources before authorizing it on an application.
+		"internal_api_resource_view",
 	}
 
 	form := url.Values{}

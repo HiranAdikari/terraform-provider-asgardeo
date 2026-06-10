@@ -206,6 +206,72 @@ type AdvancedConfigurations struct {
 	EnableAPIBasedAuthentication bool `json:"enableAPIBasedAuthentication,omitempty"`
 }
 
+// ─── API Resource ─────────────────────────────────────────────────────────────
+
+// APIResource is a single entry returned by GET /api-resources. It models an
+// Asgardeo "API resource" (a protected API such as the SCIM2 Users endpoint)
+// along with the scopes it declares.
+type APIResource struct {
+	ID         string             `json:"id"`
+	Name       string             `json:"name"`
+	Identifier string             `json:"identifier"`
+	Type       string             `json:"type"`
+	Scopes     []APIResourceScope `json:"scopes"`
+}
+
+// APIResourceScope is a scope declared by an API resource.
+type APIResourceScope struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
+}
+
+// APIResourceListResponse is returned by GET /api-resources. Asgardeo has used
+// both "apiResources" and "items" as the list envelope key across versions, so
+// both are decoded and merged by GetAPIResourceByIdentifier.
+type APIResourceListResponse struct {
+	TotalResults int           `json:"totalResults"`
+	APIResources []APIResource `json:"apiResources"`
+	Items        []APIResource `json:"items"`
+}
+
+// ─── Authorized API ───────────────────────────────────────────────────────────
+
+// AuthorizedAPI is a single entry returned by
+// GET /applications/{appId}/authorized-apis. It describes one API resource
+// that the application has been authorized to call, plus the scopes granted.
+type AuthorizedAPI struct {
+	ID               string            `json:"id"`
+	Identifier       string            `json:"identifier"`
+	DisplayName      string            `json:"displayName"`
+	PolicyID         string            `json:"policyId"`
+	Type             string            `json:"type"`
+	AuthorizedScopes []AuthorizedScope `json:"authorizedScopes"`
+}
+
+// AuthorizedScope is a scope granted on an authorized API.
+type AuthorizedScope struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+}
+
+// AuthorizeAPIRequest is sent to POST /applications/{appId}/authorized-apis.
+// Note: ID is the API-resource UUID (not the identifier string).
+type AuthorizeAPIRequest struct {
+	ID               string   `json:"id"`
+	PolicyIdentifier string   `json:"policyIdentifier"`
+	Scopes           []string `json:"scopes"`
+}
+
+// PatchAuthorizedAPIRequest is sent to
+// PATCH /applications/{appId}/authorized-apis/{apiResourceId} to add or remove
+// granted scopes in place.
+type PatchAuthorizedAPIRequest struct {
+	AddedScopes   []string `json:"addedScopes"`
+	RemovedScopes []string `json:"removedScopes"`
+}
+
 // ─── Error ────────────────────────────────────────────────────────────────────
 
 // APIError represents an error response from the Asgardeo API.
