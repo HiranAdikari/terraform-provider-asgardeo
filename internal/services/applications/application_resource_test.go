@@ -430,6 +430,192 @@ func TestFlattenApplication_OIDCLists(t *testing.T) {
 	})
 }
 
+// TestFlattenApplication_OIDCSubBlocksSuppressed is the direct regression for
+// the field failure: an M2M app declares only grant_types, but Asgardeo always
+// returns pkce/accessToken/refreshToken populated with server-side defaults.
+// flattenApplication must NOT materialise those sub-blocks when the prior
+// plan/state never declared them, otherwise apply fails with "block count
+// changed from 0 to 1".
+func TestFlattenApplication_OIDCSubBlocksSuppressed(t *testing.T) {
+	ctx := context.Background()
+	app := &asgardeo.ApplicationResponse{ID: "app-1", Name: "m2m", ApplicationEnabled: true}
+
+	// The API returns all three sub-blocks fully populated with defaults.
+	apiOIDC := &asgardeo.OIDCConfiguration{
+		GrantTypes:   []string{"client_credentials"},
+		PKCE:         &asgardeo.PKCEConfig{Mandatory: false, SupportPlainTransformAlgorithm: false},
+		AccessToken:  &asgardeo.AccessTokenConfig{Type: "JWT", UserAccessTokenExpiryInSeconds: 3600, ApplicationAccessTokenExpiryInSeconds: 3600},
+		RefreshToken: &asgardeo.RefreshTokenConfig{ExpiryInSeconds: 86400, RenewRefreshToken: true},
+	}
+
+	t.Run("nil prior oidc block suppresses all sub-blocks (create/apply path)", func(t *testing.T) {
+		got := flattenApplication(ctx, app, apiOIDC, nil, applicationModel{
+			OIDC: []oidcModel{{
+				GrantTypes: []types.String{types.StringValue("client_credentials")},
+				// No pkce/access_token/refresh_token declared.
+			}},
+		})
+		if len(got.OIDC) != 1 {
+			t.Fatalf("OIDC: want 1 block, got %d", len(got.OIDC))
+		}
+		om := got.OIDC[0]
+		if len(om.PKCE) != 0 {
+			t.Errorf("PKCE: want 0 (suppressed), got %d", len(om.PKCE))
+		}
+		if len(om.AccessToken) != 0 {
+			t.Errorf("AccessToken: want 0 (suppressed), got %d", len(om.AccessToken))
+		}
+		if len(om.RefreshToken) != 0 {
+			t.Errorf("RefreshToken: want 0 (suppressed), got %d", len(om.RefreshToken))
+		}
+	})
+
+	t.Run("empty prior model (import path) suppresses all sub-blocks", func(t *testing.T) {
+		got := flattenApplication(ctx, app, apiOIDC, nil, applicationModel{})
+		om := got.OIDC[0]
+		if len(om.PKCE) != 0 || len(om.AccessToken) != 0 || len(om.RefreshToken) != 0 {
+			t.Errorf("import: want all sub-blocks suppressed, got pkce=%d access=%d refresh=%d",
+				len(om.PKCE), len(om.AccessToken), len(om.RefreshToken))
+		}
+	})
+}
+
+// TestFlattenApplication_OIDCSubBlocksPopulated pins the inverse: when the prior
+// plan/state DID declare a sub-block, the API's values flow through into state.
+func TestFlattenApplication_OIDCSubBlocksPopulated(t *testing.T) {
+	ctx := context.Background()
+	app := &asgardeo.ApplicationResponse{ID: "app-1", Name: "web", ApplicationEnabled: true}
+
+	apiOIDC := &asgardeo.OIDCConfiguration{
+		GrantTypes:   []string{"authorization_code"},
+		PKCE:         &asgardeo.PKCEConfig{Mandatory: true, SupportPlainTransformAlgorithm: false},
+		AccessToken:  &asgardeo.AccessTokenConfig{Type: "Default", UserAccessTokenExpiryInSeconds: 1800, ApplicationAccessTokenExpiryInSeconds: 7200},
+		RefreshToken: &asgardeo.RefreshTokenConfig{ExpiryInSeconds: 43200, RenewRefreshToken: false},
+	}
+
+	// Prior declared all three sub-blocks.
+	prior := applicationModel{
+		OIDC: []oidcModel{{
+			GrantTypes:   []types.String{types.StringValue("authorization_code")},
+			PKCE:         []pkceModel{{}},
+			AccessToken:  []accessTokenModel{{}},
+			RefreshToken: []refreshTokenModel{{}},
+		}},
+	}
+
+	got := flattenApplication(ctx, app, apiOIDC, nil, prior)
+	om := got.OIDC[0]
+
+	if len(om.PKCE) != 1 {
+		t.Fatalf("PKCE: want 1 block, got %d", len(om.PKCE))
+	}
+	if !om.PKCE[0].Mandatory.Equal(types.BoolValue(true)) {
+		t.Errorf("PKCE.Mandatory: want true, got %v", om.PKCE[0].Mandatory)
+	}
+	if len(om.AccessToken) != 1 {
+		t.Fatalf("AccessToken: want 1 block, got %d", len(om.AccessToken))
+	}
+	if !om.AccessToken[0].Type.Equal(types.StringValue("Default")) {
+		t.Errorf("AccessToken.Type: want Default, got %v", om.AccessToken[0].Type)
+	}
+	if !om.AccessToken[0].UserAccessTokenExpirySeconds.Equal(types.Int64Value(1800)) {
+		t.Errorf("AccessToken.UserAccessTokenExpirySeconds: want 1800, got %v", om.AccessToken[0].UserAccessTokenExpirySeconds)
+	}
+	if len(om.RefreshToken) != 1 {
+		t.Fatalf("RefreshToken: want 1 block, got %d", len(om.RefreshToken))
+	}
+	if !om.RefreshToken[0].RenewRefreshToken.Equal(types.BoolValue(false)) {
+		t.Errorf("RefreshToken.RenewRefreshToken: want false, got %v", om.RefreshToken[0].RenewRefreshToken)
+	}
+	if !om.RefreshToken[0].ExpirySeconds.Equal(types.Int64Value(43200)) {
+		t.Errorf("RefreshToken.ExpirySeconds: want 43200, got %v", om.RefreshToken[0].ExpirySeconds)
+	}
+}
+
+// TestFlattenApplication_OIDCSubBlocksPartial pins that sub-block suppression is
+// independent per block: a prior that declares only pkce keeps pkce and
+// suppresses access_token and refresh_token even though the API returns all three.
+func TestFlattenApplication_OIDCSubBlocksPartial(t *testing.T) {
+	ctx := context.Background()
+	app := &asgardeo.ApplicationResponse{ID: "app-1", Name: "web", ApplicationEnabled: true}
+
+	apiOIDC := &asgardeo.OIDCConfiguration{
+		GrantTypes:   []string{"authorization_code"},
+		PKCE:         &asgardeo.PKCEConfig{Mandatory: true},
+		AccessToken:  &asgardeo.AccessTokenConfig{Type: "JWT", UserAccessTokenExpiryInSeconds: 3600},
+		RefreshToken: &asgardeo.RefreshTokenConfig{ExpiryInSeconds: 86400, RenewRefreshToken: true},
+	}
+
+	prior := applicationModel{
+		OIDC: []oidcModel{{
+			GrantTypes: []types.String{types.StringValue("authorization_code")},
+			PKCE:       []pkceModel{{}},
+			// access_token and refresh_token NOT declared.
+		}},
+	}
+
+	got := flattenApplication(ctx, app, apiOIDC, nil, prior)
+	om := got.OIDC[0]
+
+	if len(om.PKCE) != 1 {
+		t.Errorf("PKCE: want 1 (configured), got %d", len(om.PKCE))
+	}
+	if len(om.AccessToken) != 0 {
+		t.Errorf("AccessToken: want 0 (suppressed), got %d", len(om.AccessToken))
+	}
+	if len(om.RefreshToken) != 0 {
+		t.Errorf("RefreshToken: want 0 (suppressed), got %d", len(om.RefreshToken))
+	}
+}
+
+// TestFlattenApplication_SAMLSLOSuppressed pins the same suppression for the
+// SAML single_logout sub-block: configured prior keeps it, unconfigured prior
+// drops it even though the API returns a populated singleLogoutProfile.
+func TestFlattenApplication_SAMLSLOSuppressed(t *testing.T) {
+	ctx := context.Background()
+	app := &asgardeo.ApplicationResponse{ID: "app-1", Name: "saml", ApplicationEnabled: true}
+
+	samlCfg := &asgardeo.SAMLConfiguration{
+		ManualConfiguration: &asgardeo.SAMLManualConfiguration{
+			Issuer:                "https://sp.example.com",
+			AssertionConsumerURLs: []string{"https://sp.example.com/acs"},
+			SingleLogoutProfile:   &asgardeo.SAMLSLOProfile{Enabled: true},
+		},
+	}
+
+	t.Run("prior without single_logout suppresses the block", func(t *testing.T) {
+		prior := applicationModel{
+			SAML: []samlModel{{ManualConfiguration: []samlManualModel{{
+				Issuer: types.StringValue("https://sp.example.com"),
+			}}}},
+		}
+		got := flattenApplication(ctx, app, nil, samlCfg, prior)
+		if len(got.SAML) != 1 || len(got.SAML[0].ManualConfiguration) != 1 {
+			t.Fatalf("SAML: want 1 manual_configuration, got %+v", got.SAML)
+		}
+		if n := len(got.SAML[0].ManualConfiguration[0].SingleLogout); n != 0 {
+			t.Errorf("SingleLogout: want 0 (suppressed), got %d", n)
+		}
+	})
+
+	t.Run("prior with single_logout keeps the block", func(t *testing.T) {
+		prior := applicationModel{
+			SAML: []samlModel{{ManualConfiguration: []samlManualModel{{
+				Issuer:       types.StringValue("https://sp.example.com"),
+				SingleLogout: []samlSLOModel{{}},
+			}}}},
+		}
+		got := flattenApplication(ctx, app, nil, samlCfg, prior)
+		slo := got.SAML[0].ManualConfiguration[0].SingleLogout
+		if len(slo) != 1 {
+			t.Fatalf("SingleLogout: want 1 (configured), got %d", len(slo))
+		}
+		if !slo[0].Enabled.Equal(types.BoolValue(true)) {
+			t.Errorf("SingleLogout.Enabled: want true, got %v", slo[0].Enabled)
+		}
+	})
+}
+
 func elementStrings(t *testing.T, ctx context.Context, l types.List) []string {
 	t.Helper()
 	if l.IsNull() || l.IsUnknown() {

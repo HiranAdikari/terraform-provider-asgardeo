@@ -524,6 +524,32 @@ func buildAdvancedConfig(m advancedModel) asgardeo.AdvancedConfigurations {
 
 // ─── Flatteners (API struct → model) ─────────────────────────────────────────
 
+// oidcSubBlockConfigured reports whether the prior plan/state declared a
+// particular OIDC sub-block (pkce / access_token / refresh_token). The
+// framework treats nested blocks as user-authored config: if the prior config
+// did not contain the block, the flattened state must not contain it either,
+// even when the API returns server-side defaults for it. On Create/Update the
+// prior is the plan; on import the prior is empty, so unconfigured sub-blocks
+// are suppressed — matching the `advanced {}` import semantics. A nil prior
+// (no oidc block at all) means nothing was configured.
+func oidcSubBlockConfigured(prior *oidcModel, has func(*oidcModel) bool) bool {
+	if prior == nil {
+		return false
+	}
+	return has(prior)
+}
+
+// samlSLOConfigured reports whether the prior plan/state declared a
+// `single_logout {}` block under saml.manual_configuration. Like the OIDC
+// sub-blocks, Asgardeo returns a singleLogoutProfile with defaults even when
+// the user never wrote the block, so we suppress it unless it was configured.
+func samlSLOConfigured(prior applicationModel) bool {
+	if len(prior.SAML) == 0 || len(prior.SAML[0].ManualConfiguration) == 0 {
+		return false
+	}
+	return len(prior.SAML[0].ManualConfiguration[0].SingleLogout) > 0
+}
+
 // flattenApplication converts API responses into the Terraform state model.
 // The prior state/plan is passed so that blocks absent from the API response
 // can be preserved as empty slices (Terraform requires consistent types).
@@ -608,20 +634,30 @@ func flattenApplication(
 			}
 		}
 		om.LogoutRedirectURLs = stringListValue(logoutURLs)
-		if oidcCfg.PKCE != nil {
+
+		// Asgardeo always returns pkce, accessToken and refreshToken populated
+		// with server-side defaults for every OIDC app — even an M2M app that
+		// only declared grant_types. The framework forbids materialising a
+		// nested block the user never wrote: doing so trips "block count changed
+		// from 0 to 1" on apply. So gate each sub-block on whether the prior
+		// plan/state actually declared it. When it was declared we surface the
+		// API's values (or carry the prior block through on import); when it was
+		// null it stays null regardless of the API defaults. This mirrors the
+		// `advanced {}` suppression pattern.
+		if oidcSubBlockConfigured(priorOIDC, func(p *oidcModel) bool { return len(p.PKCE) > 0 }) && oidcCfg.PKCE != nil {
 			om.PKCE = []pkceModel{{
 				Mandatory:                      types.BoolValue(oidcCfg.PKCE.Mandatory),
 				SupportPlainTransformAlgorithm: types.BoolValue(oidcCfg.PKCE.SupportPlainTransformAlgorithm),
 			}}
 		}
-		if oidcCfg.AccessToken != nil {
+		if oidcSubBlockConfigured(priorOIDC, func(p *oidcModel) bool { return len(p.AccessToken) > 0 }) && oidcCfg.AccessToken != nil {
 			om.AccessToken = []accessTokenModel{{
 				Type:                                types.StringValue(oidcCfg.AccessToken.Type),
 				UserAccessTokenExpirySeconds:        types.Int64Value(oidcCfg.AccessToken.UserAccessTokenExpiryInSeconds),
 				ApplicationAccessTokenExpirySeconds: types.Int64Value(oidcCfg.AccessToken.ApplicationAccessTokenExpiryInSeconds),
 			}}
 		}
-		if oidcCfg.RefreshToken != nil {
+		if oidcSubBlockConfigured(priorOIDC, func(p *oidcModel) bool { return len(p.RefreshToken) > 0 }) && oidcCfg.RefreshToken != nil {
 			om.RefreshToken = []refreshTokenModel{{
 				ExpirySeconds:     types.Int64Value(oidcCfg.RefreshToken.ExpiryInSeconds),
 				RenewRefreshToken: types.BoolValue(oidcCfg.RefreshToken.RenewRefreshToken),
@@ -658,7 +694,11 @@ func flattenApplication(
 		for _, u := range mc.AssertionConsumerURLs {
 			mm.AssertionConsumerURLs = append(mm.AssertionConsumerURLs, types.StringValue(u))
 		}
-		if mc.SingleLogoutProfile != nil {
+		// Same exposure as the OIDC sub-blocks: Asgardeo returns a
+		// singleLogoutProfile with defaults even when the user never wrote a
+		// `single_logout {}` block. Only surface it when the prior plan/state
+		// declared it, so an unconfigured block stays absent after apply.
+		if samlSLOConfigured(prior) && mc.SingleLogoutProfile != nil {
 			mm.SingleLogout = []samlSLOModel{{
 				Enabled:           types.BoolValue(mc.SingleLogoutProfile.Enabled),
 				LogoutRequestURL:  types.StringValue(mc.SingleLogoutProfile.LogoutRequestURL),
