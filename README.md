@@ -144,6 +144,8 @@ output "rancher_oidc_client_secret" {
    - `internal_application_mgt_update`
    - `internal_application_mgt_delete`
    - `internal_api_resource_view` (required by `asgardeo_application_authorized_api` to resolve an API-resource identifier to its UUID)
+   - `internal_application_internal_api_update` (required by `asgardeo_application_authorized_api` to update or remove an authorization of a management/organization API such as `/scim2/Users` — without it Asgardeo returns `APP-60520: Forbidden`)
+   - `internal_application_business_api_update` (same, for user-defined business APIs)
 3. Copy the **Client ID** and **Client Secret**.
 
 Supply credentials via provider arguments or environment variables:

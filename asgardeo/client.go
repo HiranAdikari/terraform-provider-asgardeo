@@ -121,6 +121,16 @@ func (c *Client) fetchToken(ctx context.Context) (string, error) {
 		// API-resource identifier (e.g. "/scim2/Users") to its UUID via
 		// GET /api-resources before authorizing it on an application.
 		"internal_api_resource_view",
+		// PATCH/DELETE on /applications/{id}/authorized-apis additionally
+		// require these per API-resource type: _internal_ for management/
+		// organization APIs (e.g. /scim2/Users), _business_ for user-defined
+		// business APIs. Without them Asgardeo answers APP-60520 Forbidden on
+		// scope updates and de-authorizations even when
+		// internal_application_mgt_update was granted. Asgardeo intersects the
+		// requested scopes with the app's console authorizations and silently
+		// drops ungranted ones, so requesting them unconditionally is safe.
+		"internal_application_internal_api_update",
+		"internal_application_business_api_update",
 	}
 
 	form := url.Values{}

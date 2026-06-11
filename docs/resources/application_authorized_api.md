@@ -22,6 +22,16 @@ be authorized for the **API Resources / View** scope
 identifier lookup returns no results and creation fails with an
 "API resource not found" error.
 
+~> **Console prerequisite for updates and deletes.** Changing the `scopes` of an
+existing authorization, or destroying the resource, additionally requires the
+**Application Management API → Update authorized internal APIs of an
+Application** scope (`internal_application_internal_api_update`) when the
+authorized API is a management/organization API (such as `/scim2/Users`), or
+**Update authorized business APIs of an Application**
+(`internal_application_business_api_update`) for user-defined business APIs.
+Without the matching scope, Asgardeo rejects the update/delete with
+`APP-60520: Forbidden` even though creating the authorization succeeded.
+
 ## Example Usage
 
 ```terraform
